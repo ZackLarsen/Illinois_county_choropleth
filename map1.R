@@ -1,3 +1,12 @@
+##################################################
+## Project:
+## Script purpose:
+## Date:
+## Author:
+##################################################
+
+
+
 # Setup -------------------------------------------------------------------
 
 
@@ -5,7 +14,7 @@ library(pacman)
 library(tidyverse)
 library(magrittr)
 
-p_load(flexdashboard, leaflet, leaflet.extras, jsonlite, geojsonio,
+p_load(flexdashboard, leaflet, leaflet.extras, jsonlite, geojsonio, geojsonsf,
        rgdal, here, conflicted, readxl, data.table, DataExplorer, esquisse,
        mlr, parsnip, ranger)
 
@@ -17,109 +26,136 @@ conflict_prefer("filter", "dplyr")
 
 # Data Prep ---------------------------------------------------------------
 
+# US Zip Code Shapefile
+#shape <- readOGR(dsn = "data/tl_2019_us_zcta510", layer = "tl_2019_us_zcta510")
 
-
-# Shapefile
-shape <- readOGR(dsn = "data/tl_2019_us_zcta510", layer = "tl_2019_us_zcta510")
 
 
 # Subset so that we only have the zip codes listed in the datafile 
-il_shapes <- shape[shape$ZCTA5CE10 %in% extra_data$`Zip Code`,]
+#il_shapes <- shape[shape$ZCTA5CE10 %in% extra_data$`Zip Code`,]
 
 # Remove shape, as we no longer need in memory:
-rm(shape)
+#rm(shape)
 
 
 
 
-LHS <- il_shapes@data
-RHS <- extra_data
+# IL ZCTA geojson
+# https://geodata.lib.berkeley.edu/catalog/TG00ILZCTA
+#IL_ZCTA <- read_json("data/TG00ILZCTA-geojson.json")
+#IL_ZCTA <- geojsonio::geojson_read("data/TG00ILZCTA-geojson.json", what = "sp")
+IL_ZCTA <- geojson_sf('data/TG00ILZCTA-geojson.json')
 
-LHS %<>% 
-  as.data.frame() %>% 
-  mutate_all(as.character) %>% 
-  mutate_all(as.numeric) %>% 
-  select(ZCTA5CE10, ALAND10, AWATER10) %>% 
-  mutate(ATOTAL10 = ALAND10 + AWATER10)
+
+
+
+# https://simplemaps.com/data/us-zips
+us_zips <- fread('data/simplemaps_uszips_basicv1.6/uszips.csv')
+
+us_zips %<>% 
+  filter(state_id == 'IL') %>% 
+  select(state_id, zip, county_name, population, density, lat, lng) %>% 
+  rename(ZCTA = 'zip') %>% 
+  mutate_at(vars(ZCTA), as.character)
+
+glimpse(us_zips)
+
+
+
+
+
+
+
+
+
+LHS <- IL_ZCTA@data
+RHS <- us_zips %>% 
+  select(zip, county_name, population, density, lat, lng)
+
+glimpse(LHS)
+glimpse(RHS)
+
+# Change zip from integer to factor to match types with geojson object:
+RHS %<>% 
+  mutate_at(vars(zip), as.factor)
 
 joined_data <- LHS %>% 
-  inner_join(RHS, by = c("ZCTA5CE10" = "Zip Code"))
-
-
+  inner_join(RHS, by = c("ZCTA" = "zip"))
 
 joined_data
 
+# Add the us_zips-joined data to the actual shapefile for the
+# Illinois Zip Codes:
+IL_ZCTA@data <- joined_data
 
 
 
 
 
 
-# Counts_of_xxxxx --------------------------------------------------------------
 
 
-joined_data %>% 
-  select(-ALAND10, -AWATER10, ATOTAL10) %>% 
-  select(ZCTA5CE10, var1, var2, var3) %>% 
-  mutate(ratio = var1 / ifelse(var2 == 0, 1, var3)) %>% 
-  arrange(-var3) %>% 
+
+
+
+
+
+mapdf <- inner_join(IL_ZCTA, us_zips, by = 'ZCTA') 
+
+
+
+
+
+
+
+
+
+
+
+# Experiments -------------------------------------------------------------
+
+us_zips %>% 
   head()
 
 
-
-
-# Had to remove the arrange() call below, which was causing the zip code shapefile to plot
-# things in the incorrect order, making zip codes appear in the wrong place on the map:
-extra_data <- joined_data %>% 
-  select(-ALAND10, -AWATER10, -ATOTAL10, -ratio) %>% 
-  replace_na(replace = list(var3 = 0)) %>% 
-  mutate(
-    ratio1 = var1 / ifelse(var3 == 0, 1, var2),
-    binary = ifelse(var3 == 0 & var2 > 0, 100, 0)
-  ) %>% 
-  replace_na(replace = list(ratio1 = 0))
+leaflet(us_zips, options = leafletOptions(minZoom = 7, maxZoom = 12)) %>%
+  setView(lng = -88.08716, lat = 42.06394, zoom = 7) %>% 
+  # Base tile groups
+  addProviderTiles(providers$Stamen.Terrain, group = "Terrain") %>% 
+  addMarkers(~lng, ~lat)
 
 
 
 
 
-il_shapes@data <- extra_data
 
 
 
 
 
-# Create the HTML content to serve as the popup label
+
+
+
+
 labels <- sprintf(
   "<strong>Zip Code#: %s</strong><br/>
-  __in zip code: %s<br/>
-  var1 %s<br/>
-  var2: %s<br/>
-  var3: %s<br/>",
-  il_shapes$ZCTA5CE10,
-  il_shapes$var1,
-  il_shapes$var2,
-  il_shapes$var3
+  County Name: %s<br/>
+  Population: %s<br/>",
+  mapdf$ZCTA,
+  mapdf$county_name,
+  mapdf$population
 ) %>% 
   lapply(htmltools::HTML)
 
+pop_pal <- colorBin("YlOrRd", mapdf$population, 9, pretty = TRUE)
+density_pal <- colorBin("YlOrRd", mapdf$density, 9, pretty = TRUE)
 
-
-pal <- colorBin("YlOrRd", il_shapes$ratio1, 5, pretty = TRUE)
-
-
-# Binary for zero / nonzero:
-bin_pal <- colorBin("YlOrRd", il_shapes$binary, 2, pretty = FALSE)
-
-
-
-
-
-leaflet(il_shapes) %>%
+leaflet(mapdf, options = leafletOptions(minZoom = 7, maxZoom = 12)) %>%
+  setView(lng = -88.08716, lat = 42.06394, zoom = 7) %>% 
   # Base tile groups
-  addProviderTiles(providers$Stamen.Terrain, group = "Terrain") %>%
-  # Overlay groups
-  addPolygons(fillColor = ~pal(ratio1),
+  addProviderTiles(providers$Stamen.Terrain, group = "Terrain") %>% 
+  #addMarkers(~lng, ~lat) %>% 
+  addPolygons(fillColor = ~pop_pal(population),
               weight = 1,
               opacity = 1,
               color = "white",
@@ -136,9 +172,9 @@ leaflet(il_shapes) %>%
                 style = list("font-weight" = "normal", padding = "3px 8px"),
                 textsize = "15px",
                 direction = "auto"),
-              group = "var1"
+              group = "Population"
   ) %>% 
-  addPolygons(fillColor = ~pal2(var2),
+  addPolygons(fillColor = ~density_pal(density),
               weight = 1,
               opacity = 1,
               color = "white",
@@ -155,38 +191,10 @@ leaflet(il_shapes) %>%
                 style = list("font-weight" = "normal", padding = "3px 8px"),
                 textsize = "15px",
                 direction = "auto"),
-              group = "var2"
-  ) %>%   
-  # This is the binary one for...
-  # We are keeping it out of the layers control buttons so it always displays in 
-  # the background
-  addPolygons(fillColor = ~bin_pal(binary),
-              weight = 1,
-              opacity = 1,
-              color = "white",
-              #dashArray = "3",
-              fillOpacity = 0.9,
-              highlight = highlightOptions(
-                weight = 5,
-                color = "#666",
-                #dashArray = "",
-                fillOpacity = 0.3,
-                bringToFront = TRUE),
-              label = ~labels,
-              labelOptions = labelOptions(
-                style = list("font-weight" = "normal", padding = "3px 8px"),
-                textsize = "15px",
-                direction = "auto"),
-              group = "Binary"
+              group = "Density"
   ) %>% 
-  #addMiniMap() %>% 
-  # Layers control
   addLayersControl(
-    overlayGroups = c("var1", "var2", "var3"), # Notice "Binary" is missing here on purpose
-    options = layersControlOptions(collapsed = FALSE, autoZIndex = TRUE),
-    position = "topright"
-  ) %>%
-  # The hideGroup() calls below ensure that we start the map with all layers deselected:
-  hideGroup("var1") %>% 
-  hideGroup("var2") %>% 
-  hideGroup("var3")
+    overlayGroups = c("Population", "Density"),
+    options = layersControlOptions(collapsed = FALSE)
+  ) %>% 
+  hideGroup("Density")
