@@ -192,12 +192,12 @@ leaflet(mapdf, options = leafletOptions(minZoom = 7, maxZoom = 12)) %>%
 
 
 
-cook_dupage$ZCTA
 
 
-cook_dupage %>% 
-  filter(ZCTA == 60155)
 
+
+
+# Cook and DuPage counties only:
 
 labels <- sprintf(
   "<strong>Zip Code#: %s</strong><br/>
