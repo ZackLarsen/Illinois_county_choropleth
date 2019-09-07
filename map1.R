@@ -58,7 +58,7 @@ us_zips %<>%
   rename(ZCTA = 'zip') %>% 
   mutate_at(vars(ZCTA), as.character)
 
-glimpse(us_zips)
+#glimpse(us_zips)
 
 
 
@@ -68,66 +68,46 @@ glimpse(us_zips)
 
 
 
-LHS <- IL_ZCTA@data
-RHS <- us_zips %>% 
-  select(zip, county_name, population, density, lat, lng)
-
-glimpse(LHS)
-glimpse(RHS)
-
-# Change zip from integer to factor to match types with geojson object:
-RHS %<>% 
-  mutate_at(vars(zip), as.factor)
-
-joined_data <- LHS %>% 
-  inner_join(RHS, by = c("ZCTA" = "zip"))
-
-joined_data
-
-# Add the us_zips-joined data to the actual shapefile for the
-# Illinois Zip Codes:
-IL_ZCTA@data <- joined_data
-
-
+# LHS <- IL_ZCTA@data
+# RHS <- us_zips %>% 
+#   select(zip, county_name, population, density, lat, lng)
+# 
+# glimpse(LHS)
+# glimpse(RHS)
+# 
+# # Change zip from integer to factor to match types with geojson object:
+# RHS %<>% 
+#   mutate_at(vars(zip), as.factor)
+# 
+# joined_data <- LHS %>% 
+#   inner_join(RHS, by = c("ZCTA" = "zip"))
+# 
+# joined_data
+# 
+# # Add the us_zips-joined data to the actual shapefile for the
+# # Illinois Zip Codes:
+# IL_ZCTA@data <- joined_data
 
 
 
 
 
-
-
-
-
-
-
+# Join census ZCTA code geojson shapefile object to population data:
 mapdf <- inner_join(IL_ZCTA, us_zips, by = 'ZCTA') 
-
-
-
-
-
-
-
 
 
 
 
 # Experiments -------------------------------------------------------------
 
-us_zips %>% 
-  head()
-
-
-leaflet(us_zips, options = leafletOptions(minZoom = 7, maxZoom = 12)) %>%
-  setView(lng = -88.08716, lat = 42.06394, zoom = 7) %>% 
-  # Base tile groups
-  addProviderTiles(providers$Stamen.Terrain, group = "Terrain") %>% 
-  addMarkers(~lng, ~lat)
-
-
-
-
-
+# us_zips %>% 
+#   head()
+# 
+# leaflet(us_zips, options = leafletOptions(minZoom = 7, maxZoom = 12)) %>%
+#   setView(lng = -88.08716, lat = 42.06394, zoom = 7) %>% 
+#   # Base tile groups
+#   addProviderTiles(providers$Stamen.Terrain, group = "Terrain") %>% 
+#   addMarkers(~lng, ~lat)
 
 
 
