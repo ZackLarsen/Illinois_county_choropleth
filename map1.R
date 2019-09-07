@@ -1,8 +1,8 @@
 ##################################################
-## Project:
-## Script purpose:
-## Date:
-## Author:
+## Project: Illinois County Choropleth
+## Script purpose: Use R Leaflet to build choropleth map
+## Date: September 6, 2019
+## Author: Zack Larsen
 ##################################################
 
 
@@ -19,10 +19,7 @@ p_load(flexdashboard, leaflet, leaflet.extras, jsonlite, geojsonio, geojsonsf,
        mlr, parsnip, ranger)
 
 conflict_prefer("filter", "dplyr")
-
-
-
-
+conflict_prefer("geojson_sf", "geojsonsf")
 
 # Data Prep ---------------------------------------------------------------
 
@@ -94,6 +91,12 @@ us_zips %<>%
 
 # Join census ZCTA code geojson shapefile object to population data:
 mapdf <- inner_join(IL_ZCTA, us_zips, by = 'ZCTA') 
+
+
+
+# Join census ZCTA code geojson shapefile object to population data
+# but ONLY FOR Cook and DuPage counties:
+cook_dupage <- inner_join(IL_ZCTA, us_zips %>% filter(county_name %in% c('Cook', 'DuPage')), by = 'ZCTA') 
 
 
 
@@ -178,3 +181,91 @@ leaflet(mapdf, options = leafletOptions(minZoom = 7, maxZoom = 12)) %>%
     options = layersControlOptions(collapsed = FALSE)
   ) %>% 
   hideGroup("Density")
+
+
+
+
+
+
+
+
+
+
+
+cook_dupage$ZCTA
+
+
+cook_dupage %>% 
+  filter(ZCTA == 60155)
+
+
+labels <- sprintf(
+  "<strong>Zip Code#: %s</strong><br/>
+  County Name: %s<br/>
+  Population: %s<br/>
+  Population Density: %s<br/>",
+  cook_dupage$ZCTA,
+  cook_dupage$county_name,
+  cook_dupage$population,
+  cook_dupage$density
+) %>% 
+  lapply(htmltools::HTML)
+
+pop_pal <- colorBin("YlOrRd", cook_dupage$population, 8, pretty = TRUE)
+density_pal <- colorBin("YlOrRd", cook_dupage$density, 8, pretty = TRUE)
+
+leaflet(cook_dupage, options = leafletOptions(minZoom = 9, maxZoom = 12)) %>%
+  setView(lng = -87.85636, lat = 41.85781, zoom = 10) %>% 
+  # Base tile groups
+  addProviderTiles(providers$Stamen.Terrain, group = "Terrain") %>% 
+  #addMarkers(~lng, ~lat) %>% 
+  addPolygons(fillColor = ~pop_pal(population),
+              weight = 1,
+              opacity = 1,
+              color = "white",
+              #dashArray = "3",
+              fillOpacity = 0.9,
+              highlight = highlightOptions(
+                weight = 5,
+                color = "#666",
+                #dashArray = "",
+                fillOpacity = 0.3,
+                bringToFront = TRUE),
+              label = ~labels,
+              labelOptions = labelOptions(
+                style = list("font-weight" = "normal", padding = "3px 8px"),
+                textsize = "15px",
+                direction = "auto"),
+              group = "Population"
+  ) %>% 
+  addPolygons(fillColor = ~density_pal(density),
+              weight = 1,
+              opacity = 1,
+              color = "white",
+              #dashArray = "3",
+              fillOpacity = 0.9,
+              highlight = highlightOptions(
+                weight = 5,
+                color = "#666",
+                #dashArray = "",
+                fillOpacity = 0.3,
+                bringToFront = TRUE),
+              label = ~labels,
+              labelOptions = labelOptions(
+                style = list("font-weight" = "normal", padding = "3px 8px"),
+                textsize = "15px",
+                direction = "auto"),
+              group = "Density"
+  ) %>% 
+  addLayersControl(
+    overlayGroups = c("Population", "Density"),
+    options = layersControlOptions(collapsed = FALSE)
+  ) %>% 
+  hideGroup("Density")
+
+
+
+
+
+
+
